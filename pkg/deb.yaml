@@ -1,0 +1,11 @@
+# available variables are
+# DEB_NAME
+# DEB_CONTROL
+# DEB_POSTINST
+# set in your configuration yaml file (key deb)
+
+script: |
+  mkdir -p /pkg/DEBIAN
+  echo "${DEB_CONTROL}" > /pkg/DEBIAN/control
+  [ ! -z ${DEB_POSTINST} ] && echo ${DEB_POSTINST} > /pkg/DEBIAN/postinst
+  cd /pkg && dpkg-deb --root-owner-group --build /pkg ${DEB_NAME}.deb

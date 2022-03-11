@@ -1,0 +1,13 @@
+distro:
+  generate:
+    script: |
+      #!/bin/bash
+      source /app/env.sh
+      chmod +x /app/user_deps.sh /app/build_app.sh /app/build_package.sh
+      /app/user_deps.sh
+      cd /source
+      su -c /app/build_app.sh packager
+      su -c /app/build_package.sh packager
+
+pkg:
+  type: deb

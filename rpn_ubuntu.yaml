@@ -1,0 +1,28 @@
+distro:
+  name: ubuntu
+  version: ["20.04", "21.04", "21.10"]
+  # generate
+
+app:
+  source_path: /home/louis/Development/rpn
+  dependencies: |
+    apt install -y libgmp-dev libmpfr6 libmpfr-dev
+  build:
+    type: cmake
+    cmake-options: -DRPN_VERSION=v2.4.2
+  # build:
+  #   type: custom
+  #   script: |
+  #     rmdir /source/build && mkdir /source/build
+  #     cmake -DRPN_VERSION=v2.4.2 -DCMAKE_INSTALL_PREFIX=/pkg -B /source/build /source
+  #     make -C /source/build && make -C /source/build install
+
+pkg:
+  name: rpn_v2.4.2
+  control: |
+    Package: rpn
+    Version: 2.4.2
+    Maintainer: Louis Rubet
+    Architecture: all
+    Description: Reverse Polish Notation CLI calculator
+  #postinst:

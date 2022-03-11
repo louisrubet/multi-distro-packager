@@ -1,0 +1,5 @@
+script: |
+    rmdir /source/build
+    mkdir /source/build
+    cmake $(CMAKE_OPTIONS) -DCMAKE_INSTALL_PREFIX=/pkg -B /source/build /source
+    make -C /source/build && make -C /source/build install
