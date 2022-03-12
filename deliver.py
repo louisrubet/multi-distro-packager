@@ -33,27 +33,22 @@ class Log:
                 print(GREEN + 'ok' + NORMAL)
         self.check_begun = False
 
-    def critical(self, text=None):
+    def critical(self, text):
         self.stop_check(critical=True)
-        if text is not None:
-            print(RED + text + NORMAL)
+        print(RED + text + NORMAL)
 
-    def info(self, text=None):
+    def info(self, text):
         self.stop_check()
-        if text is not None:
-            print(text)
+        print(text)
 
-    def debug(self, text=None):
+    def debug(self, text):
         pass
-        # self.stop_check()
-        # if text is not None:
-        #    print(text)
 
     def check(self, text):
         self.stop_check()
-        if text is not None:
-            self.check_begun = True
-            print(text + ' .. ', end='')
+        self.check_begun = True
+        print(text + ' .. ', end='')
+        sys.stdout.flush()
 
 
 logger = Log()
@@ -203,7 +198,7 @@ def main():
         # load the configuration: user (priority) configuration is complemented by generic distro configuration
         pak = Packager()
         config = YamlObject(config_path)
-        config.merge('distro/' + config.distro.name + '/distro.yaml')
+        config.merge('distro/' + config.distro.name + '.yaml')
 
         for version in config.distro.version:
             logger.info('Processing ' + config.distro.name + '-' + version)
@@ -213,7 +208,9 @@ def main():
             if (not pak.make_image(distro=config.distro.name,
                                    version=version,
                                    image_tag=image_tag)):
+                logger.stop_check(critical=True)
                 continue
+            logger.stop_check()
 
             logger.check('\tbuilding app and package ' + config.distro.name + '-' + version)
             if (not pak.build_and_install(image_tag=image_tag,
@@ -221,8 +218,9 @@ def main():
                                           distro_conf=config.distro,
                                           app_conf=config.app,
                                           pkg_conf=config.pkg)):
+                logger.stop_check(critical=True)
                 continue
-            logger.info()
+            logger.stop_check()
 
 
 if __name__ == '__main__':
