@@ -1,0 +1,13 @@
+distro:
+  name: ubuntu
+  version: ["20.04"]
+
+app:
+  source:
+    type:
+  build:
+    type: custom
+
+pkg:
+  name: mypkg
+  control:
