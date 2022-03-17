@@ -1,2 +1,4 @@
+# default fields for ubuntu
 pkg:
   type: deb
+  arch: amd64

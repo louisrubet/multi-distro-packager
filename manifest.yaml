@@ -1,0 +1,22 @@
+distro: [ubuntu:20.04, fedora:35]
+
+app:
+  source:
+    type: dir
+    path: /home/louis/Development/rpn
+  ubuntu_dependencies: [libgmp-dev, libmpfr6, libmpfr-dev]
+  fedora_dependencies: [mpfr, mpfr-devel]
+  build:
+    type: cmake
+    cmake_options: [-DRPN_VERSION=v2.4.2]
+
+pkg:
+  package: rpn
+  version: 2.4.2
+  release: 0
+  license: LGPLv3
+  summary: Reverse Polish Notation CLI calculator
+  description: rpn is a math functional language using reverse (postfix) polish notation
+  maintainer: Louis Rubet <louis@rubet.fr>
+  homepage: https://github.com/louisrubet/rpn
+  depends: mpfr

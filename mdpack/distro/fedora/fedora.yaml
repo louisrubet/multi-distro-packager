@@ -1,0 +1,4 @@
+# default fields for fedora
+pkg:
+  type: rpm
+  arch: x86_64
