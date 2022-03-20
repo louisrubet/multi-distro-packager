@@ -1,24 +1,23 @@
-- distro should be `distro: <name>:<version> like in docker
+# TODO
 
-- app
-    - change source_path to source: then
-        - like in flatpak: cf https://manpages.debian.org/testing/flatpak-builder/flatpak-manifest.5.en.html
-            - type = dir + path (sources are not copied)
-            - type = archive + url (prio) + path
-            - type = git + path + url + tag + commit
-- app
-    - build
-        type = custom, cmake, autotool
-- checks anti-erreurs les plus courantes (fichiers existent, yaml paramètres obligatoires, types des paramètres)
+## TODO list
 
-- option --force pour refaire l'image car changer les deps dans le yaml ne les fait pas refaire
-- option user ou userid pour build + pkg
-- script_file possible chaque fois qu'on peut mettre script
-- proposer une option pour clean images et containers
-
-- pkg
-  - type: generic (+ fields), rpm + spec_file, deb + control_file
-  - 
+- [x] pkg deps should manage by prio: <distro>:<version>_deps, <distro>_deps, _deps
+- [x] docker image name should begin with 'mdp-', be mdp-<distro>-<version>
+- [ ] package should be tested in the docker container at the end, after deps installation
+- [x] change source_path to source
+- [x] app source type = dir + path (sources are not copied)
+- [ ] app source type = archive + url (prio) + path (+ signature)
+- [ ] app source type = git + path + url + tag + commit
+- [ ] app build type = custom
+- [x] app build type cmake
+- [ ] app build type autotool
+- [ ] app build type python
+- [ ] checks most current errors (files exist, yaml required parameters, parameters types)
+- [ ] option --force to rebuild the image pour refaire l'image car changer les deps dans le yaml ne les fait pas refaire
+- [ ] option --prune or --clean to clean docker images and containers
+- [ ] manifest should add a user + userid configuration (build_as ?)
+- [ ] ~~docker image should include user deps~~
 
 manuel
 - la configuration est faite par addition de
@@ -35,7 +34,6 @@ The process is the following:
 - app building and installing,
 - app packaging.
 
-
 - shared with docker:
   - 1 generation directory (located in /app in the docker container) containing
     - generate.sh
@@ -47,7 +45,6 @@ The process is the following:
     - build/
     - pkg/
   - eventually 1 directory to share external sources (called /ext_sources in the docker image)
-
 
 ├── examples
 │   └── ...
@@ -144,3 +141,34 @@ RPMBUILD
 
 mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
 rpmbuild --define "_topdir `pwd`" -v -ba SPECS/{*spec_file.specs*}
+
+- distros
+`ubuntu`, `fedora`, `mint`, `opensuse`, `arch`, `debian`, `centos`, `manjaro`, `elementary`, `zorin`, `cute fish`, `deepin`
+
+- why flatpak is better
+
+cf https://www.youtube.com/watch?v=zs9QpPKDw74&ab_channel=TheLinuxExperiment
+
+old world:
+- dependencies problems, multiple ppa
+- packages to be done for every distro x release x architecture -> updates, maintainance
+- retro-compatibility of the applications (old libs)
+- security issues (privileged installation, unbound packages)
+- so for security reasons some versions are frozen for some years (ubuntu LTS for example)
+
+flatpak
+- one package for all distros
+- safer at install time because not installed as root
+- safer at runtime because sandboxed (even if not perfect, is many miles ahead from no sandboxing)
+- cannot break the user apps
+- now well integrated in app stores
+
+Not very space-efficient, but that's only half true: libraries are shared between packages.
+Flatpak packages don't use more RAM than regular packages.
+
+why not snap?
+- held by Canonical, which annoys people
+- has a closed backend source code
+- designed for servers and IoT first (-> slow to start ??)
+- not really well integratd with your desktop
+- less apps than flathub (?)
