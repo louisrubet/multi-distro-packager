@@ -1,6 +1,12 @@
 # multi-distro-packager
 
-**This work is still in progress**.
+**Please be patient**
+
+This work is still in progress but with a heavy commitment.
+
+Something really usable should be available soon.
+
+## Purpose
 
 Although flatpak and snap are probably the future of linux packages, sometime you still have to deliver `deb` or `rpm` packages for some reason.
 

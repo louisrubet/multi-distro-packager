@@ -46,6 +46,7 @@ The process is the following:
     - pkg/
   - eventually 1 directory to share external sources (called /ext_sources in the docker image)
 
+```
 ├── examples
 │   └── ...
 ├── mdpack
@@ -73,6 +74,7 @@ The process is the following:
 │   ├── tests.py
 │   └── (...)
 └── TODO.md
+```
 
 https://packaging.ubuntu.com/html/
 https://packagecloud.io/l/apt-repository
