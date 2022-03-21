@@ -2,3 +2,7 @@
 pkg:
   type: deb
   arch: amd64
+  deps:
+app:
+  build:
+    deps:

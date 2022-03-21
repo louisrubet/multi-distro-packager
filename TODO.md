@@ -28,6 +28,17 @@ manuel
 
 ## Notes
 
+You should be able to run docker without being root
+`docker run hello-world`
+
+```
+docker run -it ubuntu bash
+root@df69f66bb799:/# apt update
+Get:1 http://archive.ubuntu.com/ubuntu focal InRelease [265 kB]
+Get:2 http://security.ubuntu.com/ubuntu focal-security InRelease [114 kB]
+(...)
+```
+
 The process is the following:
 - creating a docker image based on the distro name and version indicated in the manifest file,
 - installing complementary dev packages,

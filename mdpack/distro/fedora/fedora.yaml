@@ -2,3 +2,7 @@
 pkg:
   type: rpm
   arch: x86_64
+  deps:
+app:
+  build:
+    deps:

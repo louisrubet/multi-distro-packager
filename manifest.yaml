@@ -19,5 +19,5 @@ pkg:
   description: rpn is a math functional language using reverse (postfix) polish notation
   maintainer: Louis Rubet <louis@rubet.fr>
   homepage: https://github.com/louisrubet/rpn
-  ubuntu_deps: limpfr6
-  fedora_deps: 
+  ubuntu_deps: libmpfr6
+  fedora_deps: mpfr
