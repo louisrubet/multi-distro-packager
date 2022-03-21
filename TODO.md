@@ -17,6 +17,7 @@
 - [ ] option --force to rebuild the image pour refaire l'image car changer les deps dans le yaml ne les fait pas refaire
 - [ ] option --prune or --clean to clean docker images and containers
 - [ ] manifest should add a user + userid configuration (build_as ?)
+- [ ] distro(+version) entry in manifest must have a default (ex: if there is ubuntu_deps there must have deps too)
 - [ ] ~~docker image should include user deps~~
 
 manuel

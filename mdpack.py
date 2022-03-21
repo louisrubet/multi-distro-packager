@@ -201,6 +201,12 @@ class Packager:
         # ex: fedora-35-rpn-2.4.2-0.x86_64.rpm
         return distro + '-' + version + '-' + self.package_name(manifest)
 
+    def container_name(self, image_tag, manifest):
+        return image_tag + '-' + manifest.pkg.package
+
+    def container_shared_dir(self, image_tag, manifest):
+        return LocalDirectory(self.container_name(image_tag, manifest)).path
+
     def make_docker_image(self, distro, version, image_tag):
         # docker image
         dockerfile_path = os.path.dirname(__file__) + '/mdpack/distro/' + distro + '/docker'
@@ -261,6 +267,11 @@ class Packager:
         if (os.path.exists(src_path)):
             shutil.copy(src_path, dest_dir + '/generate.sh')
 
+    def generate_test_script(self, dest_dir, manifest, distro):
+        src_path = 'mdpack/scripts/test/' + distro + '.sh'
+        if (os.path.exists(src_path)):
+            shutil.copy(src_path, dest_dir + '/test.sh')
+
     def extract_source(self, dest_dir, manifest):
         match manifest.app.source.type:
             case 'dir':
@@ -272,28 +283,29 @@ class Packager:
         return True
 
     def build_and_install(self, image_tag, distro, version, manifest):
-        container_name = image_tag + '-' + manifest.pkg.package
-        local_dir = LocalDirectory(f'{container_name}').path
+        dest_dir = LocalDirectory(self.container_name(image_tag, manifest)).path
 
         # generate process scripts
-        self.generate_env(local_dir, manifest)
-        self.generate_user_deps(local_dir, manifest, distro)
-        self.generate_build_app(local_dir, manifest)
-        self.generate_build_pkg(local_dir, manifest)
-        self.generate_process_script(local_dir, manifest, distro)
+        self.generate_env(dest_dir, manifest)
+        self.generate_user_deps(dest_dir, manifest, distro)
+        self.generate_build_app(dest_dir, manifest)
+        self.generate_build_pkg(dest_dir, manifest)
+        self.generate_process_script(dest_dir, manifest, distro)
 
-        if (not self.extract_source(local_dir, manifest)):
+        if (not self.extract_source(dest_dir, manifest)):
             return False
 
         # run a docker container, which entry point is '/app/generate.sh'
-        subprocess.run(['docker', 'stop', container_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        subprocess.run(['docker', 'rm', container_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(['docker', 'stop', self.container_name(image_tag, manifest)],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(['docker', 'rm', self.container_name(image_tag, manifest)],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         # TODO --net=host probably bad for security
         result = subprocess.run(
-            ['docker', 'run', '-it', '--net=host', '--rm', '--name', container_name,
-             '-v', f'{local_dir}:/app',
-             image_tag, '/bin/sh', '-x', '/app/generate.sh'], stdout=subprocess.PIPE)
+            ['docker', 'run', '-it', '--net=host', '--rm', '--name', self.container_name(image_tag, manifest),
+             '-v', dest_dir + ':/app',
+             image_tag, '/bin/bash', '-x', '/app/generate.sh'], stdout=subprocess.PIPE)
 
         logger.debug(result.stdout.decode('utf-8'))
 
@@ -302,12 +314,30 @@ class Packager:
             return False
 
         # deliver the generated package near the current script
-        if os.path.exists(local_dir + '/' + self.package_name(manifest)):
-            shutil.move(local_dir + '/' + self.package_name(manifest),
-                        local_dir + '/../' + self.package_final_name(distro, version, manifest))
+        if os.path.exists(dest_dir + '/' + self.package_name(manifest)):
+            shutil.copyfile(dest_dir + '/' + self.package_name(manifest),
+                            dest_dir + '/../' + self.package_final_name(distro, version, manifest))
 
         return True
 
+    def test(self, image_tag, distro, version, manifest):
+        dest_dir = LocalDirectory(self.container_name(image_tag, manifest), clear_if_exist=False).path
+
+        # generate test script
+        self.generate_env(dest_dir, manifest)
+        self.generate_test_script(dest_dir, manifest, distro)
+
+        # TODO --net=host probably bad for security
+        result = subprocess.run(
+            ['docker', 'run', '-it', '--net=host', '--rm', '--name', self.container_name(image_tag, manifest),
+             '-v', dest_dir + ':/app',
+             image_tag, '/bin/bash', '-x', '/app/test.sh'], stdout=subprocess.PIPE)
+
+        logger.debug(result.stdout.decode('utf-8'))
+
+        if (result.returncode != 0):
+            logger.critical(result.stdout.decode('utf-8'))
+            return False
 
 def main():
 
@@ -336,6 +366,7 @@ def main():
             ReplaceWithDistro(distro_dict, distro, version)
             manifest = DictObj(distro_dict)
 
+            # 1. build docker image
             logger.info('Processing ' + distro + '-' + version)
             logger.check('\tbuilding docker image ' + distro + '-' + version)
             image_tag = 'mdp-' + distro + '-' + version
@@ -346,8 +377,16 @@ def main():
                 continue
             logger.stop_check()
 
-            logger.check('\tbuilding app and package ' + distro + '-' + version)
+            # 2. build the sources and package them
+            logger.check('\tbuilding ' + pak.package_name(manifest))
             if (not pak.build_and_install(image_tag=image_tag, distro=distro, version=version, manifest=manifest)):
+                logger.stop_check(critical=True)
+                continue
+            logger.stop_check()
+
+            # 3. test the package installation
+            logger.check('\testing ' + pak.package_final_name(distro, version, manifest))
+            if (not pak.test(image_tag=image_tag, distro=distro, version=version, manifest=manifest)):
                 logger.stop_check(critical=True)
                 continue
             logger.stop_check()
