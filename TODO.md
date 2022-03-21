@@ -48,7 +48,7 @@ The process is the following:
 
 - shared with docker:
   - 1 generation directory (located in /app in the docker container) containing
-    - generate.sh
+    - whole_process.sh
     - install_user_deps.sh
     - build_app.sh
     - build_pkg.sh
@@ -67,7 +67,7 @@ The process is the following:
 │   │   │   ├── docker
 │   │   │   │   ├── Dockerfile
 │   │   │   │   └── install_default_deps.sh
-│   │   │   ├── generate.sh
+│   │   │   ├── whole_process.sh
 │   │   │   ├── install_users_deps.sh
 │   │   │   └── <distro_name>.yaml
 │   │   └── (...)

@@ -6,7 +6,6 @@ import os
 import subprocess
 import yaml  # pip install pyyaml
 import shutil
-import glob
 
 
 class Log:
@@ -237,7 +236,7 @@ class Packager:
                     env.append(val + ' ')
                 env.append('"\n')
 
-    def generate_env(self, dest_dir, manifest):
+    def make_env_script(self, dest_dir, manifest):
         env = LocalScript(dest_dir + '/env.sh')
         env.append('#!/bin/bash\n')
         self.export_env(env, 'PKG_PACKAGE', manifest.pkg, 'package')
@@ -246,28 +245,28 @@ class Packager:
         env.append(f'export PKG_FILENAME={self.package_name(manifest)}\n')
         env.close()
 
-    def generate_user_deps(self, dest_dir, manifest, distro):
+    def make_user_deps_script(self, dest_dir, manifest, distro):
         if hasattr(manifest.app.build, 'deps'):
             shutil.copy('mdpack/distro/' + distro + '/install_user_deps.sh',
                         dest_dir + '/install_user_deps.sh')
 
-    def generate_build_app(self, dest_dir, manifest):
+    def make_build_script(self, dest_dir, manifest):
         src_path = 'mdpack/scripts/build/' + manifest.app.build.type + '.sh'
         if (os.path.exists(src_path)):
-            shutil.copy(src_path, dest_dir + '/build_app.sh')
+            shutil.copy(src_path, dest_dir + '/build.sh')
 
-    def generate_build_pkg(self, dest_dir, manifest):
+    def make_pkg_script(self, dest_dir, manifest):
         src_path = 'mdpack/scripts/pkg/' + manifest.pkg.type + '.sh'
         if (os.path.exists(src_path)):
             PkgConfBuilder(manifest, dest_dir)
-            shutil.copy(src_path, dest_dir + '/build_pkg.sh')
+            shutil.copy(src_path, dest_dir + '/pkg.sh')
 
-    def generate_process_script(self, dest_dir, manifest, distro):
-        src_path = 'mdpack/distro/' + distro + '/generate.sh'
+    def make_process_script(self, dest_dir, manifest, distro):
+        src_path = 'mdpack/distro/' + distro + '/whole_process.sh'
         if (os.path.exists(src_path)):
-            shutil.copy(src_path, dest_dir + '/generate.sh')
+            shutil.copy(src_path, dest_dir + '/whole_process.sh')
 
-    def generate_test_script(self, dest_dir, manifest, distro):
+    def make_test_script(self, dest_dir, manifest, distro):
         src_path = 'mdpack/scripts/test/' + distro + '.sh'
         if (os.path.exists(src_path)):
             shutil.copy(src_path, dest_dir + '/test.sh')
@@ -286,16 +285,16 @@ class Packager:
         dest_dir = LocalDirectory(self.container_name(image_tag, manifest)).path
 
         # generate process scripts
-        self.generate_env(dest_dir, manifest)
-        self.generate_user_deps(dest_dir, manifest, distro)
-        self.generate_build_app(dest_dir, manifest)
-        self.generate_build_pkg(dest_dir, manifest)
-        self.generate_process_script(dest_dir, manifest, distro)
+        self.make_env_script(dest_dir, manifest)
+        self.make_user_deps_script(dest_dir, manifest, distro)
+        self.make_build_script(dest_dir, manifest)
+        self.make_pkg_script(dest_dir, manifest)
+        self.make_process_script(dest_dir, manifest, distro)
 
         if (not self.extract_source(dest_dir, manifest)):
             return False
 
-        # run a docker container, which entry point is '/app/generate.sh'
+        # run a docker container, which entry point is '/app/whole_process.sh'
         subprocess.run(['docker', 'stop', self.container_name(image_tag, manifest)],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run(['docker', 'rm', self.container_name(image_tag, manifest)],
@@ -305,7 +304,7 @@ class Packager:
         result = subprocess.run(
             ['docker', 'run', '-it', '--net=host', '--rm', '--name', self.container_name(image_tag, manifest),
              '-v', dest_dir + ':/app',
-             image_tag, '/bin/bash', '-x', '/app/generate.sh'], stdout=subprocess.PIPE)
+             image_tag, '/bin/bash', '-x', '/app/whole_process.sh'], stdout=subprocess.PIPE)
 
         logger.debug(result.stdout.decode('utf-8'))
 
@@ -324,8 +323,8 @@ class Packager:
         dest_dir = LocalDirectory(self.container_name(image_tag, manifest), clear_if_exist=False).path
 
         # generate test script
-        self.generate_env(dest_dir, manifest)
-        self.generate_test_script(dest_dir, manifest, distro)
+        self.make_env_script(dest_dir, manifest)
+        self.make_test_script(dest_dir, manifest, distro)
 
         # TODO --net=host probably bad for security
         result = subprocess.run(
