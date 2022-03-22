@@ -4,7 +4,7 @@
 
 - [x] pkg deps should manage by prio: <distro>:<version>_deps, <distro>_deps, _deps
 - [x] docker image name should begin with 'mdp-', be mdp-<distro>-<version>
-- [ ] package should be tested in the docker container at the end, after deps installation
+- [x] package should be tested in the docker container at the end, after deps installation
 - [x] change source_path to source
 - [x] app source type = dir + path (sources are not copied)
 - [ ] app source type = archive + url (prio) + path (+ signature)
@@ -17,7 +17,8 @@
 - [ ] option --force to rebuild the image pour refaire l'image car changer les deps dans le yaml ne les fait pas refaire
 - [ ] option --prune or --clean to clean docker images and containers
 - [ ] manifest should add a user + userid configuration (build_as ?)
-- [ ] distro(+version) entry in manifest must have a default (ex: if there is ubuntu_deps there must have deps too)
+- [x] distro(+version) entry in manifest must have a default (ex: if there is ubuntu_deps there must have deps too)
+- [x] manifest mandatory fields check
 - [ ] ~~docker image should include user deps~~
 
 manuel
