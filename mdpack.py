@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
-from copy import deepcopy
 import sys
 import os
 import subprocess
-import yaml  # pip install pyyaml
 import shutil
 import logging
+import yaml  # pip install pyyaml
+from cerberus import Validator
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(message)s')
 
@@ -65,27 +65,84 @@ class AddingYaml():
         return self
 
 
-class DictObj():
-    "transform dictionary to object"
-    # cf https://joelmccune.com/python-dictionary-as-object/
-
+class Manifest:
     def __init__(self, in_dict):
+        "transform dictionary to object"
+        # cf https://joelmccune.com/python-dictionary-as-object/
         for key, val in in_dict.items():
             if isinstance(val, (list, tuple)):
-                setattr(self, key, [DictObj(x) if isinstance(x, dict) else x for x in val])
+                setattr(self, key, [Manifest(x) if isinstance(x, dict) else x for x in val])
             else:
-                setattr(self, key, DictObj(val) if isinstance(val, dict) else val)
+                setattr(self, key, Manifest(val) if isinstance(val, dict) else val)
 
+    @staticmethod
+    def check_required_fields(in_dict):
+        schema = {
+            'distro': {
+                'required': True,
+                'type': 'list',
+                'schema': {'type': 'string'}
+            },
+            'app': {
+                'required': True,
+                'type': 'dict',
+                'schema': {
+                    'source': {
+                        'required': True,
+                        'type': 'dict',
+                        'schema': {'type': {'required': True, 'type': 'string'}}
+                    },
+                    'build': {
+                        'required': True,
+                        'type': 'dict',
+                        'schema': {'type': {'required': True, 'type': 'string'}}
+                    }
+                }
+            },
+            'pkg': {
+                'required': True,
+                'type': 'dict',
+                'schema': {
+                    'package': {'required': True, 'type': 'string'},
+                    'version': {'required': True, 'type': 'string'}
+                }
+            }
+        }
+        val = Validator(schema, allow_unknown=True)
+        if not val.validate(in_dict, schema):
+            logging.critical('Manifest validation error')
+            logging.critical(val.errors)
+            return False
+        return True
 
-class ReplaceWithDistro:
-    "Replace value in XXX=value with the value of distro_XXX or distro_version_XXX if exists"
+    @ staticmethod
+    def add_defaults(in_dict, distro, version):
+        "Add key=XXX when distro_key or distro_version_key exist"
+        d = distro + '_'
+        dv = distro + '_' + version + '_'
+        add_list = list()
+        for key, val in in_dict.items():
+            if isinstance(val, dict):
+                Manifest.add_defaults(val, distro, version)
+            else:
+                kern = None
+                if key.startswith(d):
+                    kern = key[len(d):]
+                if key.startswith(dv):
+                    kern = key[len(dv):]
+                if kern is not None and not kern in in_dict:
+                    add_list.append(kern)
+        for element in add_list:
+            in_dict[element] = ''
 
-    def __init__(self, in_dict, distro, version):
+    @ staticmethod
+    def substitute_defaults(in_dict, distro, version):
+        "Replace value in key=value with the value of distro_key or distro_version_key if exists"
         d = distro + '_'
         dv = distro + '_' + version + '_'
         for key, val in in_dict.items():
             if isinstance(val, dict):
-                ReplaceWithDistro(val, distro, version)
+                Manifest.substitute_defaults(val, distro, version)
             elif in_dict.get(dv + key) is not None:
                 in_dict[key] = in_dict[dv + key]
             elif in_dict.get(d + key) is not None:
@@ -144,7 +201,8 @@ class PkgConfBuilder:
             # excluding already existing files and directories
             conf.write("find /app/install -name '*' | sed 's/\/app\/install//g' | tail -n +2")
             conf.write(
-                " | bash -c 'while read file ; do [ ! -f ${file} -a ! -d ${file} ] && echo \"${file}\"; done' > /app/rpmbuild/files_list\n")
+                " | bash -c 'while read file ; do [ ! -f ${file} -a ! -d ${file} ] "
+                "&& echo \"${file}\"; done' > /app/rpmbuild/files_list\n")
             conf.write('%files -f /app/rpmbuild/files_list\n')
             conf.close()
 
@@ -249,7 +307,7 @@ class Packager:
                     return False
         return True
 
-    def build_and_install(self, image_tag, distro, version, manifest):
+    def build(self, image_tag, distro, version, manifest):
         dest_dir = LocalDirectory(self.container_name(image_tag, manifest)).path
 
         # generate process scripts
@@ -329,11 +387,14 @@ def main():
             version = split[1]
 
             # complete manifest with optional missing fields
-            # TODO avoid reopening path or copying user_manifest if possible
             distro_yaml = 'mdpack/distro/' + distro + '/' + distro + '.yaml'
             distro_dict = (AddingYaml(path) + AddingYaml(distro_yaml)).dict
-            ReplaceWithDistro(distro_dict, distro, version)
-            manifest = DictObj(distro_dict)
+            Manifest.add_defaults(distro_dict, distro, version)
+            Manifest.substitute_defaults(distro_dict, distro, version)
+            if not Manifest.check_required_fields(distro_dict):
+                logging.critical(f'Please correct the file {path}')
+                os._exit(1)
+            manifest = Manifest(distro_dict)
 
             # 1. build docker image
             logging.info('Processing ' + distro + '-' + version)
@@ -347,7 +408,7 @@ def main():
 
             # 2. build the sources and package them
             logging.info('- building ' + pak.package_name(manifest))
-            if (not pak.build_and_install(image_tag=image_tag, distro=distro, version=version, manifest=manifest)):
+            if (not pak.build(image_tag=image_tag, distro=distro, version=version, manifest=manifest)):
                 logging.info('FAILED')
                 continue
 
