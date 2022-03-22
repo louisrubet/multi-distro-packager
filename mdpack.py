@@ -6,45 +6,13 @@ import os
 import subprocess
 import yaml  # pip install pyyaml
 import shutil
+import logging
 
-
-class Log:
-    def __init__(self):
-        self.check_begun = False
-
-    def stop_check(self, critical=False):
-        if self.check_begun:
-            if critical:
-                print('FAILED')
-            else:
-                print('ok')
-        self.check_begun = False
-
-    def critical(self, text):
-        self.stop_check(critical=True)
-        print(text)
-
-    def info(self, text):
-        self.stop_check()
-        print(text)
-
-    def debug(self, text):
-        self.stop_check()
-        print(text)
-        pass
-
-    def check(self, text):
-        self.stop_check()
-        self.check_begun = True
-        print(text + ' .. ', end='')
-        sys.stdout.flush()
-
-
-logger = Log()
+logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(message)s')
 
 
 def syntax():
-    logger.info('Syntax: deliver.py manifest.yaml ...')
+    logging.info('Syntax: deliver.py manifest.yaml ...')
 
 
 class LocalScript:
@@ -213,10 +181,10 @@ class Packager:
         result = subprocess.run(['docker', 'build', '--network', 'host', '--build-arg',
                                  f'VERSION={version}', '--tag', image_tag, dockerfile_path], stdout=subprocess.PIPE)
 
-        logger.debug(result.stdout.decode("utf-8"))
+        logging.debug(result.stdout.decode("utf-8"))
 
         if (result.returncode != 0):
-            logger.critical(result.stdout.decode("utf-8"))
+            logging.critical(result.stdout.decode("utf-8"))
             return False
         return True
 
@@ -277,7 +245,7 @@ class Packager:
                 result = subprocess.run(['cp', '-rp', manifest.app.source.path + '/.', dest_dir + '/src'],
                                         stdout=subprocess.PIPE)
                 if (result.returncode != 0):
-                    logger.critical(result.stdout.decode('utf-8'))
+                    logging.critical(result.stdout.decode('utf-8'))
                     return False
         return True
 
@@ -306,10 +274,10 @@ class Packager:
              '-v', dest_dir + ':/app',
              image_tag, '/bin/bash', '-x', '/app/whole_process.sh'], stdout=subprocess.PIPE)
 
-        logger.debug(result.stdout.decode('utf-8'))
+        logging.debug(result.stdout.decode('utf-8'))
 
         if (result.returncode != 0):
-            logger.critical(result.stdout.decode('utf-8'))
+            logging.critical(result.stdout.decode('utf-8'))
             return False
 
         # deliver the generated package near the current script
@@ -332,11 +300,13 @@ class Packager:
              '-v', dest_dir + ':/app',
              image_tag, '/bin/bash', '-x', '/app/test.sh'], stdout=subprocess.PIPE)
 
-        logger.debug(result.stdout.decode('utf-8'))
+        logging.debug(result.stdout.decode('utf-8'))
 
         if (result.returncode != 0):
-            logger.critical(result.stdout.decode('utf-8'))
+            logging.critical(result.stdout.decode('utf-8'))
             return False
+        return True
+
 
 def main():
 
@@ -353,7 +323,7 @@ def main():
 
             split = distro_version.split(':')
             if len(split) != 2:
-                logger.critical(f'Incorrect "{distro_version}", should be <distro>:<name>')
+                logging.critical(f'Incorrect "{distro_version}", should be <distro>:<name>')
                 continue
             distro = split[0]
             version = split[1]
@@ -366,29 +336,26 @@ def main():
             manifest = DictObj(distro_dict)
 
             # 1. build docker image
-            logger.info('Processing ' + distro + '-' + version)
-            logger.check('\tbuilding docker image ' + distro + '-' + version)
+            logging.info('Processing ' + distro + '-' + version)
+            logging.info('- building docker image ' + distro + '-' + version)
             image_tag = 'mdp-' + distro + '-' + version
             if (not pak.make_docker_image(distro=distro,
                                           version=version,
                                           image_tag=image_tag)):
-                logger.stop_check(critical=True)
+                logging.info('FAILED')
                 continue
-            logger.stop_check()
 
             # 2. build the sources and package them
-            logger.check('\tbuilding ' + pak.package_name(manifest))
+            logging.info('- building ' + pak.package_name(manifest))
             if (not pak.build_and_install(image_tag=image_tag, distro=distro, version=version, manifest=manifest)):
-                logger.stop_check(critical=True)
+                logging.info('FAILED')
                 continue
-            logger.stop_check()
 
             # 3. test the package installation
-            logger.check('\testing ' + pak.package_final_name(distro, version, manifest))
+            logging.info('- testing ' + pak.package_final_name(distro, version, manifest))
             if (not pak.test(image_tag=image_tag, distro=distro, version=version, manifest=manifest)):
-                logger.stop_check(critical=True)
+                logging.info('FAILED')
                 continue
-            logger.stop_check()
 
 
 if __name__ == '__main__':
