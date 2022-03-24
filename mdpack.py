@@ -5,14 +5,12 @@ import os
 import subprocess
 import shutil
 import logging
+from tkinter import Pack
 import yaml  # pip install pyyaml
 from cerberus import Validator  # pip cerberus pyyaml
+import argparse
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(message)s')
-
-
-def syntax():
-    logging.info('Syntax: deliver.py manifest.yaml ...')
 
 
 class LocalScript:
@@ -54,8 +52,11 @@ class LocalDirectory:
 class AddingYaml():
     def __init__(self, yaml_path):
         self.dict = dict()
-        with open(yaml_path) as file:
-            self.dict = yaml.full_load(file)
+        try:
+            with open(yaml_path) as file:
+                self.dict = yaml.full_load(file)
+        except:
+            logging.critical(f'Error opening manifest "{yaml_path}", does this file exist?')
 
     def __add__(self, o):
         return self.complete(self.dict, o.dict)
@@ -121,7 +122,7 @@ class Manifest:
             return False
         return True
 
-    @ staticmethod
+    @staticmethod
     def add_defaults(in_dict, distro, version):
         "Add key=XXX when distro_key or distro_version_key exist"
         d = distro + '_'
@@ -141,7 +142,7 @@ class Manifest:
         for element in add_list:
             in_dict[element] = ''
 
-    @ staticmethod
+    @staticmethod
     def substitute_defaults(in_dict, distro, version):
         "Replace value in key=value with value from distro_version_key=value or distro_key=value"
         d = distro + '_'
@@ -214,8 +215,23 @@ class PkgConfBuilder:
 
 
 class Packager:
-    def __init__(self):
-        pass
+
+    @staticmethod
+    def get_distro_version(distro_version):
+        split = distro_version.split(':')
+        if len(split) != 2:
+            logging.critical(f'Incorrect "{distro_version}", should be <distro>:<name>')
+            return '', ''
+        return split[0], split[1]
+
+    @staticmethod
+    def run(args):
+        result = subprocess.run(args, capture_output=True)
+        if (result.returncode != 0):
+            logging.critical(result.stdout.decode('utf-8'))
+            return False
+        logging.debug(result.stdout.decode("utf-8"))
+        return True
 
     def package_name(self, manifest):
         # the compound package name is based on rpm full package name convention
@@ -241,16 +257,10 @@ class Packager:
     def make_docker_image(self, distro, version, image_tag):
         # docker image
         dockerfile_path = os.path.dirname(__file__) + '/mdpack/distro/' + distro + '/docker'
+
         # TODO --network host to be removed if possible (security)
-        result = subprocess.run(['docker', 'build', '--network', 'host', '--build-arg',
-                                 f'VERSION={version}', '--tag', image_tag, dockerfile_path], stdout=subprocess.PIPE)
-
-        logging.debug(result.stdout.decode("utf-8"))
-
-        if (result.returncode != 0):
-            logging.critical(result.stdout.decode("utf-8"))
-            return False
-        return True
+        return Packager.run(['docker', 'build', '--network', 'host', '--build-arg',
+                             f'VERSION={version}', '--tag', image_tag, dockerfile_path])
 
     def export_env(self, env, env_name, manifest_obj, manifest_attr):
         "export a manifest entry as a shell env variable"
@@ -306,12 +316,7 @@ class Packager:
     def extract_source(self, dest_dir, manifest):
         match manifest.app.source.type:
             case 'dir':
-                result = subprocess.run(['cp', '-rp', manifest.app.source.path + '/.', dest_dir],
-                                        stdout=subprocess.PIPE)
-                if (result.returncode != 0):
-                    logging.critical(result.stdout.decode('utf-8'))
-                    return False
-                return True
+                return Packager.run(['cp', '-rp', manifest.app.source.path + '/.', dest_dir])
 
             case 'git':
                 LocalDirectory(dest_dir)
@@ -326,13 +331,8 @@ class Packager:
 
                 # check commit and tag match
                 if hasattr(manifest.app.source, 'tag') and hasattr(manifest.app.source, 'commit'):
-                    result = subprocess.run(
-                        ['git', 'ls-remote', '--tags', manifest.app.source.url, '|', 'grep',
-                         f'refs/tags/{manifest.app.source.tag}' + '^{}'],
-                        stdout=subprocess.PIPE)
-                    if result.returncode != 0 or isinstance(result.stdout, str) or result.stdout.split()[0].decode(
-                            'utf-8') != manifest.app.source.commit:
-                        logging.critical('app.source.tag and app.source.commit don\'t match')
+                    if not Packager.run(['git', 'ls-remote', '--tags', manifest.app.source.url, '|', 'grep',
+                                         f'refs/tags/{manifest.app.source.tag}' + '^{}']):
                         return False
 
                 if hasattr(manifest.app.source, 'tag'):
@@ -341,20 +341,10 @@ class Packager:
                     commit = manifest.app.source.commit
 
                 # clone and checkout
-                result = subprocess.run(
-                    ['git', 'clone', '--recurse-submodules', manifest.app.source.url, dest_dir],
-                    stdout=subprocess.PIPE)
-                if result.returncode != 0:
-                    logging.critical(result.stdout.decode('utf-8'))
-                    return False
-                result = subprocess.run(
-                    ['git', '-C', dest_dir, 'checkout', commit],
-                    stdout=subprocess.PIPE)
-                if result.returncode != 0:
-                    logging.critical(result.stdout.decode('utf-8'))
+                if not Packager.run(['git', 'clone', '--recurse-submodules', manifest.app.source.url, dest_dir]):
                     return False
 
-                return True
+                return Packager.run(['git', '-C', dest_dir, 'checkout', commit])
 
         logging.critical(f'source type "{manifest.app.source.type}" is unknown')
         return False
@@ -379,15 +369,9 @@ class Packager:
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         # TODO --net=host probably bad for security
-        result = subprocess.run(
+        if not Packager.run(
             ['docker', 'run', '-it', '--net=host', '--rm', '--name', self.container_name(image_tag, manifest),
-             '-v', dest_dir + ':/app', image_tag, '/bin/bash', '-x', '/app/whole_process.sh'],
-            stdout=subprocess.PIPE)
-
-        logging.debug(result.stdout.decode('utf-8'))
-
-        if (result.returncode != 0):
-            logging.critical(result.stdout.decode('utf-8'))
+             '-v', dest_dir + ':/app', image_tag, '/bin/bash', '-x', '/app/whole_process.sh']):
             return False
 
         # deliver the generated package near the current script
@@ -405,37 +389,41 @@ class Packager:
         self.make_test_script(dest_dir, manifest, distro)
 
         # TODO --net=host probably bad for security
-        result = subprocess.run(
+        return Packager.run(
             ['docker', 'run', '-it', '--net=host', '--rm', '--name', self.container_name(image_tag, manifest),
-             '-v', dest_dir + ':/app', image_tag, '/bin/bash', '-x', '/app/test.sh'], stdout=subprocess.PIPE)
+             '-v', dest_dir + ':/app', image_tag, '/bin/bash', '-x', '/app/test.sh'])
 
-        logging.debug(result.stdout.decode('utf-8'))
 
-        if (result.returncode != 0):
-            logging.critical(result.stdout.decode('utf-8'))
-            return False
-        return True
+class Options():
+
+    @staticmethod
+    def parse():
+        # -h option is provided by default
+        parser = argparse.ArgumentParser()
+        parser.add_argument('manifests', metavar='manifest_file', type=str, nargs='+',
+                            help='manifest files')
+        parser.add_argument('-v', '--verbose', action='store_true', help='increase verbosity')
+        Options.args = parser.parse_args()
 
 
 def main():
 
-    if len(sys.argv) == 1:
-        syntax()
-        sys.exit(1)
+    Options.parse()
+    if Options.args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
 
-    for path in sys.argv[1:]:
+    for path in Options.args.manifests:
 
         pak = Packager()
         user_manifest = AddingYaml(path)
+        if not user_manifest.dict:
+            continue
 
         for distro_version in user_manifest.dict['distro']:
 
-            split = distro_version.split(':')
-            if len(split) != 2:
-                logging.critical(f'Incorrect "{distro_version}", should be <distro>:<name>')
+            distro, version = pak.get_distro_version(distro_version)
+            if not distro:
                 continue
-            distro = split[0]
-            version = split[1]
 
             # complete manifest with distro fields then replace default entries by distro entries
             distro_yaml = 'mdpack/distro/' + distro + '/' + distro + '.yaml'
@@ -445,6 +433,7 @@ def main():
             if not Manifest.check_required_fields(distro_dict):
                 logging.critical(f'Please correct the file {path}')
                 os._exit(1)
+
             manifest = Manifest(distro_dict)
 
             # 1. build docker image
@@ -454,19 +443,19 @@ def main():
             if (not pak.make_docker_image(distro=distro,
                                           version=version,
                                           image_tag=image_tag)):
-                logging.info('FAILED')
+                logging.critical('FAILED')
                 continue
 
             # 2. build the sources and package them
             logging.info('- building ' + pak.package_name(manifest))
             if (not pak.build(image_tag=image_tag, distro=distro, version=version, manifest=manifest)):
-                logging.info('FAILED')
+                logging.critical('FAILED')
                 continue
 
             # 3. test the package installation
             logging.info('- testing ' + pak.package_final_name(distro, version, manifest))
             if (not pak.test(image_tag=image_tag, distro=distro, version=version, manifest=manifest)):
-                logging.info('FAILED')
+                logging.critical('FAILED')
                 continue
 
 
