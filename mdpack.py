@@ -6,7 +6,7 @@ import subprocess
 import shutil
 import logging
 import yaml  # pip install pyyaml
-from cerberus import Validator
+from cerberus import Validator  # pip cerberus pyyaml
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(message)s')
 
@@ -17,8 +17,11 @@ def syntax():
 
 class LocalScript:
     def __init__(self, name):
-        self.path = os.path.realpath(name)
-        self.file = open(self.path, mode="w+")
+        try:
+            self.path = os.path.realpath(name)
+            self.file = open(self.path, mode="w+")
+        except:
+            logging.critical(f'Couldn\'t open {self.path} for writing')
 
     def path(self):
         self.file.close()
@@ -34,12 +37,15 @@ class LocalScript:
 
 class LocalDirectory:
     def __init__(self, name, clear_if_exist=True):
-        # self.path = tempfile.TemporaryDirectory()
-        self.path = os.path.realpath(name)
-        if os.path.exists(name) and clear_if_exist:
-            shutil.rmtree(self.path)
-        if not os.path.exists(name):
-            os.makedirs(name, mode=0o777)
+        self.path = ''
+        try:
+            self.path = os.path.realpath(name)
+            if os.path.exists(name) and clear_if_exist:
+                shutil.rmtree(self.path)
+            if not os.path.exists(name):
+                os.makedirs(name, mode=0o777)
+        except:
+            logging.critical(f'Problem in creating {name}')
 
     def path(self):
         return self.path
@@ -137,7 +143,7 @@ class Manifest:
 
     @ staticmethod
     def substitute_defaults(in_dict, distro, version):
-        "Replace value in key=value with the value of distro_key or distro_version_key if exists"
+        "Replace value in key=value with value from distro_version_key=value or distro_key=value"
         d = distro + '_'
         dv = distro + '_' + version + '_'
         for key, val in in_dict.items():
@@ -164,8 +170,8 @@ class PkgConfBuilder:
         return False
 
     def to_deb(self, manifest, dest_dir):
-        if not os.path.exists(dest_dir + '/install/DEBIAN'):
-            os.makedirs(dest_dir + '/install/DEBIAN', mode=0o777)
+        LocalDirectory(dest_dir + '/install/DEBIAN')
+
         # DEBIAN/control file structure
         with open(dest_dir + '/install/DEBIAN/control', 'w+') as conf:
             self.write(conf, 'Package: ', manifest.pkg, 'package')
@@ -180,8 +186,8 @@ class PkgConfBuilder:
             conf.close()
 
     def to_rpm(self, manifest, dest_dir):
-        if not os.path.exists(dest_dir + '/rpmbuild/SPECS/'):
-            os.makedirs(dest_dir + '/rpmbuild/SPECS/', mode=0o777)
+        LocalDirectory(dest_dir + '/rpmbuild/SPECS/')
+
         # RPM spec file structure
         with open(dest_dir + '/rpmbuild/SPECS/pkg.spec', 'w+') as conf:
             self.write(conf, 'Name: ', manifest.pkg, 'package')
@@ -196,7 +202,7 @@ class PkgConfBuilder:
             conf.write('%define _build_id_links none\n')
             conf.write('%prep\n')
             conf.write('%build\n')
-            conf.write('%install\ncp -rf /app/install/. %{buildroot}/\n')  # TODO a link here?
+            conf.write('%install\ncp -rf /app/install/. %{buildroot}/\n')
             # automatic list of files in /app/install
             # excluding already existing files and directories
             conf.write("find /app/install -name '*' | sed 's/\/app\/install//g' | tail -n +2")
@@ -300,15 +306,61 @@ class Packager:
     def extract_source(self, dest_dir, manifest):
         match manifest.app.source.type:
             case 'dir':
-                result = subprocess.run(['cp', '-rp', manifest.app.source.path + '/.', dest_dir + '/src'],
+                result = subprocess.run(['cp', '-rp', manifest.app.source.path + '/.', dest_dir],
                                         stdout=subprocess.PIPE)
                 if (result.returncode != 0):
                     logging.critical(result.stdout.decode('utf-8'))
                     return False
-        return True
+                return True
+
+            case 'git':
+                LocalDirectory(dest_dir)
+
+                # first check required fields
+                if not hasattr(manifest.app.source, 'url'):
+                    logging.critical('app.source.url is required for git type')
+                    return False
+                if not hasattr(manifest.app.source, 'tag') and not hasattr(manifest.app.source, 'commit'):
+                    logging.critical('app.source.tag or app.source.commit is required for git type')
+                    return False
+
+                # check commit and tag match
+                if hasattr(manifest.app.source, 'tag') and hasattr(manifest.app.source, 'commit'):
+                    result = subprocess.run(
+                        ['git', 'ls-remote', '--tags', manifest.app.source.url, '|', 'grep',
+                         f'refs/tags/{manifest.app.source.tag}' + '^{}'],
+                        stdout=subprocess.PIPE)
+                    if result.returncode != 0 or isinstance(result.stdout, str) or result.stdout.split()[0].decode(
+                            'utf-8') != manifest.app.source.commit:
+                        logging.critical('app.source.tag and app.source.commit don\'t match')
+                        return False
+
+                if hasattr(manifest.app.source, 'tag'):
+                    commit = manifest.app.source.tag
+                elif hasattr(manifest.app.source, 'commit'):
+                    commit = manifest.app.source.commit
+
+                # clone and checkout
+                result = subprocess.run(
+                    ['git', 'clone', '--recurse-submodules', manifest.app.source.url, dest_dir],
+                    stdout=subprocess.PIPE)
+                if result.returncode != 0:
+                    logging.critical(result.stdout.decode('utf-8'))
+                    return False
+                result = subprocess.run(
+                    ['git', '-C', dest_dir, 'checkout', commit],
+                    stdout=subprocess.PIPE)
+                if result.returncode != 0:
+                    logging.critical(result.stdout.decode('utf-8'))
+                    return False
+
+                return True
+
+        logging.critical(f'source type "{manifest.app.source.type}" is unknown')
+        return False
 
     def build(self, image_tag, distro, version, manifest):
-        dest_dir = LocalDirectory(self.container_name(image_tag, manifest)).path
+        dest_dir = self.container_shared_dir(image_tag, manifest)
 
         # generate process scripts
         self.make_env_script(dest_dir, manifest)
@@ -317,7 +369,7 @@ class Packager:
         self.make_pkg_script(dest_dir, manifest)
         self.make_process_script(dest_dir, manifest, distro)
 
-        if (not self.extract_source(dest_dir, manifest)):
+        if (not self.extract_source(dest_dir + '/src', manifest)):
             return False
 
         # run a docker container, which entry point is '/app/whole_process.sh'
@@ -329,8 +381,8 @@ class Packager:
         # TODO --net=host probably bad for security
         result = subprocess.run(
             ['docker', 'run', '-it', '--net=host', '--rm', '--name', self.container_name(image_tag, manifest),
-             '-v', dest_dir + ':/app',
-             image_tag, '/bin/bash', '-x', '/app/whole_process.sh'], stdout=subprocess.PIPE)
+             '-v', dest_dir + ':/app', image_tag, '/bin/bash', '-x', '/app/whole_process.sh'],
+            stdout=subprocess.PIPE)
 
         logging.debug(result.stdout.decode('utf-8'))
 
@@ -355,8 +407,7 @@ class Packager:
         # TODO --net=host probably bad for security
         result = subprocess.run(
             ['docker', 'run', '-it', '--net=host', '--rm', '--name', self.container_name(image_tag, manifest),
-             '-v', dest_dir + ':/app',
-             image_tag, '/bin/bash', '-x', '/app/test.sh'], stdout=subprocess.PIPE)
+             '-v', dest_dir + ':/app', image_tag, '/bin/bash', '-x', '/app/test.sh'], stdout=subprocess.PIPE)
 
         logging.debug(result.stdout.decode('utf-8'))
 
@@ -386,7 +437,7 @@ def main():
             distro = split[0]
             version = split[1]
 
-            # complete manifest with optional missing fields
+            # complete manifest with distro fields then replace default entries by distro entries
             distro_yaml = 'mdpack/distro/' + distro + '/' + distro + '.yaml'
             distro_dict = (AddingYaml(path) + AddingYaml(distro_yaml)).dict
             Manifest.add_defaults(distro_dict, distro, version)

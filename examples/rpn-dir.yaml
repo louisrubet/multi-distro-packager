@@ -1,11 +1,9 @@
-distro: [fedora:35]
+distro: [ubuntu:20.04, fedora:35, fedora:34]
 
 app:
   source:
-    type: git
-    url: https://github.com/louisrubet/rpn.git
-    tag: v2.4.2
-    commit: cd16651dd1c3f634fe9438d24b4a63c0c825ca06
+    type: dir
+    path: /home/louis/Development/rpn
   build:
     type: cmake
     cmake_options: [-DRPN_VERSION=v2.4.2]

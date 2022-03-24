@@ -1,4 +1,4 @@
-distro: [fedora:35]
+distro: [ubuntu:20.04, ubuntu:22.04, fedora:35]
 
 app:
   source:
