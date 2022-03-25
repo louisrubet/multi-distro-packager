@@ -24,11 +24,11 @@ Please look at [the given manifest](https://github.com/louisrubet/multi-distro-p
 
 ## Principles
 
-Your project is built and packaged in a docker container.
+Your app is built and packaged docker containers matching to the distros you declared.
 
 The whole process looks like:
 
-- creating a docker image based on the distro name and version indicated in the manifest file,
+- creating a docker image based on the distro names and versions indicated in the manifest file,
 - installing the complementary development packages,
 - app building and installing,
 - app packaging,
@@ -36,11 +36,10 @@ The whole process looks like:
 
 ## Installation from this repository
 
-You must install `docker` and be able to run `docker run hello-world` without being root on your host.
+- You must install `docker` and be able to run `docker run hello-world` without being root on your host.
 
-`mdpack.py` needs `python` >= 3.6 and the pip modules `Cerberus` and `Pyyaml`.
+- `mdpack.py` needs `python` >= 3.6 and the pip modules `Cerberus` and `Pyyaml`. You can install them by running
 
-You can install them by running
 ```
 pip install -r requirements.txt
 ```
@@ -108,39 +107,40 @@ pkg:
 
 ### reference
 
-| key             | priority           | description                                                                                     |
-|-----------------|--------------------|-------------------------------------------------------------------------------------------------|
-| distro          | required           | list of couples `distro:version` to deliver for                                                 |
-|                 |                    | distros can be `ubuntu`, `fedora`, `version` must match the matching docker repo version string |
-| app             | required           | your app source and build description                                                           |
-| app.source      | required           |                                                                                                 |
-| app.source.type | required           | source type among:                                                                              |
-|                 |                    | - `dir`: the source is the local directory, `app.source.path` must contain the source path      |
-|                 |                    | - `git`: the source is a git repo, `app.source.url` must contain the repo url                   |
-|                 |                    | One of `app.source.tag` or `app.source.commit` must be provided                                 |
-|                 |                    | If both are provided then the tag and the commit must match                                     |
-|                 |                    | - `archive`, `app.source.path` must contain the source path                 _to be implemented_ |
-|                 |                    | The archive file must be a tar or zip file                                                      |
-| app.build       | required           |                                                                                                 |
-| app.build.type  | required           | The build type among:                                                                           |
-|                 |                    | - `cmake`: the source is built with `cmake`                                                     |
-|                 |                    | `cmake_options` can contain options to pass to cmake                                            |
-|                 |                    | `deps` can contain packages dependencies                                                        |
-|                 |                    | - `autotool`: the source is built with `autotool`                           _to be implemented_ |
-|                 |                    | - `custom`: the user provides a bash script                                 _to be implemented_ |
-| pkg **(1)**     | required           | packages descrition                                                                             |
-| pkg.package     | required           | package name                                                                                    |
-| pkg.version     | required           | package version                                                                                 |
-| pkg.release     | required for `rpm` | release integer                                                                                 |
-| pkg.license     | required for `rpm` |                                                                                                 |
-| pkg.arch        | optional           | default is `x86_64` for `fedora`, `amd64` for `ubuntu`                                          |
-| pkg.summary     | required           | one line description                                                                            |
-| pkg.description | required           | long description, each new line should begin with a space for `deb`                             |
-| pkg.maintainer  | required           | a standard format is `fullname <email>`                                                         |
-| pkg.section     | optional           | Category like `utils`, `net`, `mail`, etc.                                                      |
-| pkg.priority    | optional           | Importance like `required`, `standard`, `optional`, `extra`, etc.                               |
-| pkg.homepage    | optional           | Homepage URL                                                                                    |
-| pkg.depends     | optional           | Comma-separated `package:version` list                                                          |
+| key                     | priority                    | description                                                                                     |
+|-------------------------|-----------------------------|-------------------------------------------------------------------------------------------------|
+| distro                  | required                    | list of couples `distro:version` to deliver for.                                                |
+|                         |                             | distros can be `ubuntu`, `fedora`, `version` must match the docker repo version string.         |
+| app                     | required                    |                                                                                                 |
+| app.source              | required                    | your app source description.                                                                    |
+| app.source.type         | required                    | source type among:                                                                              |
+|                         |                             | - `dir`: the source is a local directory,                                                       |
+|                         |                             | - `git`: the source is a git repo,                                                              |
+|                         |                             | - `archive`: the source is a tar or zip archive.                           _to be implemented_  |
+| app.source.path         | required (`dir`, `archive`) | Path of the local directory or archive file.                                                    |
+| app.source.url          | required (`git`)            | url of the `git` repo.                                                                          |
+| app.source.tag          | optional (`git`)            | For type `git` the user must fill in `tag` or `commit` or both.                                 |
+| app.source.commit       | optional (`git`)            | If both are provided (better) then the tag and the commit must match.                           |
+| app.build               | required                    | your app source and build description.                                                          |
+| app.build.type          | required                    | The build type among:                                                                           |
+|                         |                             | - `cmake`: the source is built with `cmake`                                                     |
+|                         |                             | - `autotool`: the source is built with `autotool`                           _to be implemented_ |
+|                         |                             | - `custom`: the user provides a bash script                                 _to be implemented_ |
+| app.build.cmake_options | optional (`cmake`)          | Options for `cmake`                                                                             |
+| app.build.deps          | optional                    | Distro packages dependencies for building                                                       |
+| pkg **(1)**             | required                    | packages description                                                                            |
+| pkg.package             | required                    | package name                                                                                    |
+| pkg.version             | required                    | package version                                                                                 |
+| pkg.release             | required for `rpm`          | release integer                                                                                 |
+| pkg.license             | required for `rpm`          |                                                                                                 |
+| pkg.arch                | optional                    | default is `x86_64` for `fedora`, `amd64` for `ubuntu`                                          |
+| pkg.summary             | required                    | one line description                                                                            |
+| pkg.description         | required                    | long description, each new line should begin with a space for `deb`                             |
+| pkg.maintainer          | required                    | a standard format is `fullname <email>`                                                         |
+| pkg.section             | optional                    | Category like `utils`, `net`, `mail`, etc.                                                      |
+| pkg.priority            | optional                    | Importance like `required`, `standard`, `optional`, `extra`, etc.                               |
+| pkg.homepage            | optional                    | Homepage URL                                                                                    |
+| pkg.depends             | optional                    | Comma-separated `package:version` list                                                          |
 
 **(1)** The `pkg` fields match to the following package managers:
 
@@ -182,7 +182,7 @@ app:
 ```
 
 - `fedora_34_cmake_options` will be applied to `fedora:34` only,
-- `cmake_options` will be applied to `fedora:34`, `fedora:35` and `ubuntu_20.04`
+- `cmake_options` will be applied to `fedora:35` and `ubuntu_20.04`
 - `ubuntu_deps` will be applied on `ubuntu_20.04`
 - `fedora_deps` will be applied to `fedora:34` and `fedora:35`
 
