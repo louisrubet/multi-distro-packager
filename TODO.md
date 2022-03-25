@@ -13,11 +13,15 @@
 - [x] app build type cmake
 - [ ] app build type autotool
 - [ ] app build type python
+- [ ] distro `debian`
+- [ ] distro `archlinux`
+- [ ] distro `centos`
 - [ ] checks most current errors (files exist, yaml required parameters, parameters types)
 - [ ] option --force to rebuild the image because changing the user deps in the yaml doesn't make docker rebuild the image
 - [ ] option --prune or --clean to clean docker images and containers
-- [ ] option --verbose or -v
+- [x] option --verbose or -v
 - [ ] manifest should add a user + userid configuration (build_as ?)
 - [x] distro(+version) entry in manifest must have a default (ex: if there is ubuntu_deps there must have deps too)
 - [x] manifest mandatory fields check
 - [ ] ~~docker image should include user deps~~
+
