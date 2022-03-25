@@ -24,4 +24,4 @@
 - [x] distro(+version) entry in manifest must have a default (ex: if there is ubuntu_deps there must have deps too)
 - [x] manifest mandatory fields check
 - [ ] ~~docker image should include user deps~~
-
+- [x] should the final test be done on the raw image, and not on the dev image?
