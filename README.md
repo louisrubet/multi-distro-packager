@@ -37,7 +37,7 @@ The docker containers are run as root in order to install the complementary deve
 
 The user application is built and installed as the user `packager` (uid=1000, gid=1000).
 
-For the final test the generated package is installed with its runtime dependencies in a new container.
+For the final test the generated package is installed in a new container using the package manager of the distro, which installs the needed runtime dependencies.
 
 ## Installation from this repository
 
