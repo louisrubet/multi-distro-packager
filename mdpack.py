@@ -178,7 +178,8 @@ class PkgConfBuilder:
             self.write(conf, 'Package: ', manifest.pkg, 'package')
             self.write(conf, 'Version: ', manifest.pkg, 'version')
             self.write(conf, 'Architecture: ', manifest.pkg, 'arch')
-            self.write(conf, 'Description: ', manifest.pkg, 'description')
+            if hasattr(manifest.pkg, 'summary') and hasattr(manifest.pkg, 'description'):
+                conf.write('Description: ' + str(manifest.pkg.summary) + '\n ' + str(manifest.pkg.description))
             self.write(conf, 'Maintainer: ', manifest.pkg, 'maintainer')
             self.write(conf, 'Section: ', manifest.pkg, 'section')
             self.write(conf, 'Priority: ', manifest.pkg, 'priority')
@@ -216,7 +217,7 @@ class PkgConfBuilder:
 
 class Packager:
 
-    @staticmethod
+    @ staticmethod
     def get_distro_version(distro_version):
         split = distro_version.split(':')
         if len(split) != 2:
@@ -224,7 +225,7 @@ class Packager:
             return '', ''
         return split[0], split[1]
 
-    @staticmethod
+    @ staticmethod
     def run(args):
         result = subprocess.run(args, capture_output=True)
         if (result.returncode != 0):
@@ -363,6 +364,7 @@ class Packager:
             return False
 
         # run a docker container, which entry point is '/app/whole_process.sh'
+        # TODO should we create unnamed containers instead?
         subprocess.run(['docker', 'stop', self.container_name(image_tag, manifest)],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run(['docker', 'rm', self.container_name(image_tag, manifest)],
@@ -396,12 +398,11 @@ class Packager:
 
 class Options():
 
-    @staticmethod
+    @ staticmethod
     def parse():
         # -h option is provided by default
         parser = argparse.ArgumentParser()
-        parser.add_argument('manifests', metavar='manifest_file', type=str, nargs='+',
-                            help='manifest files')
+        parser.add_argument('manifests', metavar='manifest_file', type=str, nargs='+', help='manifest files')
         parser.add_argument('-v', '--verbose', action='store_true', help='increase verbosity')
         Options.args = parser.parse_args()
 
@@ -443,7 +444,7 @@ def main():
             if (not pak.make_docker_image(distro=distro,
                                           version=version,
                                           image_tag=image_tag)):
-                logging.critical('FAILED')
+                logging.critical('FAILED, is docker running on your host?')
                 continue
 
             # 2. build the sources and package them
