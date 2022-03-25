@@ -392,8 +392,8 @@ class Packager:
 
         # TODO --net=host probably bad for security
         return Packager.run(
-            ['docker', 'run', '-it', '--net=host', '--rm', '--name', self.container_name(image_tag, manifest),
-             '-v', dest_dir + ':/app', image_tag, '/bin/bash', '-x', '/app/test.sh'])
+            ['docker', 'run', '-it', '--net=host', '--rm', '-v', dest_dir + ':/app', distro + ':' + version,
+             '/bin/bash', '-x', '/app/test.sh'])
 
 
 class Options():

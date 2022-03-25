@@ -1,3 +1,4 @@
 #!/bin/bash
 source /app/env.sh
-apt install -y /app/${PKG_FILENAME}
+apt-get update
+apt-get install -y /app/${PKG_FILENAME}
