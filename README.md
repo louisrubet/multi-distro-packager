@@ -24,15 +24,20 @@ Please look at [the given manifest](https://github.com/louisrubet/multi-distro-p
 
 ## Principles
 
-Your app is built and packaged docker containers matching to the distros you declared.
+Your app is built and packaged in the docker containers matching to the distros you declared.
 
-The whole process looks like:
+For a given distro and version the whole process looks like:
 
-- creating a docker image based on the distro names and versions indicated in the manifest file,
-- installing the complementary development packages,
-- app building and installing,
-- app packaging,
-- app installation testing.
+- fetching the docker image and installing the standard dev packages,
+- creating a docker container and installing the complementary user development packages,
+- building, installing and packaging the user app,
+- testing the app installation.
+
+The docker containers are run as root in order to install the complementary development dependencies.
+
+The user application is built and installed as the user `packager` (uid=1000, gid=1000).
+
+For the final test the generated package is installed with its runtime dependencies in a new container.
 
 ## Installation from this repository
 
@@ -40,7 +45,7 @@ The whole process looks like:
 
 - `mdpack.py` needs `python` >= 3.6 and the pip modules `Cerberus` and `Pyyaml`. You can install them by running
 
-```
+```shell
 pip install -r requirements.txt
 ```
 
@@ -48,8 +53,8 @@ pip install -r requirements.txt
 
 Example:
 
-```
-# ./mdpack.py manifest.yaml
+```shell
+./mdpack.py manifest.yaml
 Processing ubuntu-20.04
 - building docker image ubuntu-20.04
 - building rpn-2.4.2-0.amd64.deb
@@ -62,22 +67,21 @@ Processing fedora-35
 - building docker image fedora-35
 - building rpn-2.4.2-0.x86_64.rpm
 - testing fedora-35-rpn-2.4.2-0.x86_64.rpm
-
-# ls fedora* ubuntu*
-fedora-35-rpn-2.4.2-0.x86_64.rpm  ubuntu-20.04-rpn-2.4.2-0.amd64.deb  ubuntu-22.04-rpn-2.4.2-0.amd64.deb
 ```
+
+The generated package are delivered in the current directory.
 
 ## Manifest manual
 
 The manifest is a yaml file containing the distros, app and packages description.
 
 Please refer to https://yaml.org/ for the complete yaml syntax.
- 
+
 ### example
 
 Here is a complete example of a manifest file, for delivering the package `rpn`.
 
-```
+```yaml
 distro: [ubuntu:20.04, ubuntu:22.04, fedora:35]
 
 app:
@@ -166,7 +170,7 @@ Every field of the manifest can be prefixed with `<distro>_` or `<distro>_<versi
 
 Example:
 
-```
+```yaml
 distro: [fedora:34, fedora:35, ubuntu_20.04]
 (...)
 app:
