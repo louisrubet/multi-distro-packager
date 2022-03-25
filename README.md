@@ -1,14 +1,10 @@
 # multi-distro-packager
 
-**Please be patient**
-
-This work is still in progress but with a heavy commitment.
-
-Something really usable should be available soon.
+**This work is still in progress** but with a heavy commitment.
 
 ## Purpose
 
-Although (flatpak)[https://flatpak.org/] and (snap)[https://snapcraft.io/] are probably the future of linux packages, sometime you still have to deliver `deb` or `rpm` packages for some reason.
+Although [flatpak](https://flatpak.org/) and [snap](https://snapcraft.io/) are probably the future of linux packages, sometime you still have to deliver `deb` or `rpm` packages for some reason.
 
 This project aims to develop a tool for generating such packages for several Linux distributions, according to the package managers of these distributions, and using a single easy-to-configure manifest file.
 
