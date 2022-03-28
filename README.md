@@ -187,16 +187,26 @@ app:
 
 - `fedora_34_cmake_options` will be applied to `fedora:34` only,
 - `cmake_options` will be applied to `fedora:35` and `ubuntu_20.04`
-- `ubuntu_deps` will be applied on `ubuntu_20.04`
+- `ubuntu_deps` will be applied to `ubuntu_20.04`
 - `fedora_deps` will be applied to `fedora:34` and `fedora:35`
 
 ## Performance
 
 Well, this is the bad part for now.
 
-Although building the docker images is done once until you cleanup your local docker images:
+Although building the docker images is done only once,
 
-- a complete git clone is done at every build
-- these git clones are not shallow
+- `git` source type:
+  - a complete clone is done at every build (meaning at every distro),
+  - the clone is not shallow,
+- `dir` source type: a complete source copy is made at every build (meaning at every distro),
+- all source types: all is built from scratch without cache
 - 2 containers are run, 1 for building 1 for testing
-- build dependencies are installed once per container
+- the user build dependencies are installed once per container.
+
+This induces of course performance issues, but also ensures build and test integrity.
+
+## Known issues
+
+- the only distros that can be listed here are those with a docker image,
+- you can't use your already existing`deb` or `rpm` package metadata files.
