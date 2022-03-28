@@ -12,9 +12,9 @@ This manifest allows you to configure:
 
 - the target Linux distros and their versions, among `ubuntu`, `fedora` ...
 - your project sources location as a `git` repo, an `archive`, or a local directory,
-- the generation process and tools for different languages, like `cmake` and `autotool` for now, and later `python`, `java` ...
+- the generation process and tools for different languages, like `cmake` and `autotool` for now, and more later,
 - the dependencies packages needed by your project,
-- the packages meta-data, whether their format is `deb`, `rpm`, `pacman`, `ipk` etc.
+- the packages meta-data, whether their format is `deb`, `rpm` or other.
 
 Refer to the 'Manifest manual' paragraph below.
 
