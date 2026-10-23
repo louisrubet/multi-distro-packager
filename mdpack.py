@@ -5,12 +5,17 @@ import os
 import subprocess
 import shutil
 import logging
-from tkinter import Pack
 import yaml  # pip install pyyaml
 from cerberus import Validator  # pip cerberus pyyaml
 import argparse
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(message)s')
+
+# mdpack's own files (distros, scripts), wherever it is run from
+MDPACK_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'mdpack')
+
+# Cache kept between builds (Rust toolchain, crates...), mounted as /cache
+CACHE_DIR = os.path.join(os.environ.get('XDG_CACHE_HOME', os.path.expanduser('~/.cache')), 'mdpack')
 
 
 class LocalScript:
@@ -19,7 +24,7 @@ class LocalScript:
             self.path = os.path.realpath(name)
             self.file = open(self.path, mode="w+")
         except:
-            logging.critical(f'Couldn\'t open {self.path} for writing')
+            logging.critical(rf"Couldn't open {self.path} for writing")
 
     def path(self):
         self.file.close()
@@ -163,6 +168,8 @@ class PkgConfBuilder:
                 self.to_deb(manifest, dest_dir)
             case 'rpm':
                 self.to_rpm(manifest, dest_dir)
+            case 'pacman':
+                self.to_pacman(manifest, dest_dir)
 
     def write(self, file, text, manifest, field):
         if hasattr(manifest, field):
@@ -179,7 +186,7 @@ class PkgConfBuilder:
             self.write(conf, 'Version: ', manifest.pkg, 'version')
             self.write(conf, 'Architecture: ', manifest.pkg, 'arch')
             if hasattr(manifest.pkg, 'summary') and hasattr(manifest.pkg, 'description'):
-                conf.write('Description: ' + str(manifest.pkg.summary) + '\n ' + str(manifest.pkg.description))
+                conf.write('Description: ' + str(manifest.pkg.summary) + '\n ' + str(manifest.pkg.description) + '\n')
             self.write(conf, 'Maintainer: ', manifest.pkg, 'maintainer')
             self.write(conf, 'Section: ', manifest.pkg, 'section')
             self.write(conf, 'Priority: ', manifest.pkg, 'priority')
@@ -198,20 +205,45 @@ class PkgConfBuilder:
             self.write(conf, 'License: ', manifest.pkg, 'license')
             self.write(conf, 'BuildArchitectures: ', manifest.pkg, 'arch')
             self.write(conf, 'Summary: ', manifest.pkg, 'summary')
-            self.write(conf, 'URL: ', manifest.pkg, 'Homepage')
+            self.write(conf, 'URL: ', manifest.pkg, 'homepage')
             self.write(conf, 'Requires: ', manifest.pkg, 'deps')
             self.write(conf, '%description\n', manifest.pkg, 'description')
             conf.write('%define _build_id_links none\n')
+            conf.write('%define debug_package %{nil}\n')
             conf.write('%prep\n')
             conf.write('%build\n')
             conf.write('%install\ncp -rf /app/install/. %{buildroot}/\n')
             # automatic list of files in /app/install
             # excluding already existing files and directories
-            conf.write("find /app/install -name '*' | sed 's/\/app\/install//g' | tail -n +2")
+            conf.write(r"find /app/install -name '*' | sed 's/\/app\/install//g' | tail -n +2")
             conf.write(
                 " | bash -c 'while read file ; do [ ! -f ${file} -a ! -d ${file} ] "
                 "&& echo \"${file}\"; done' > /app/rpmbuild/files_list\n")
             conf.write('%files -f /app/rpmbuild/files_list\n')
+            conf.close()
+
+    def to_pacman(self, manifest, dest_dir):
+        LocalDirectory(dest_dir + '/pacman')
+
+        # PKGBUILD packaging what was built and installed in /app/install
+        def quoted(value):
+            return "'" + str(value).replace("'", "'\\''") + "'"
+
+        pkg = manifest.pkg
+        with open(dest_dir + '/pacman/PKGBUILD', 'w+') as conf:
+            conf.write(f'pkgname={quoted(pkg.package)}\n')
+            conf.write(f'pkgver={quoted(pkg.version)}\n')
+            conf.write(f'pkgrel={quoted(getattr(pkg, "release", 1))}\n')
+            conf.write(f'pkgdesc={quoted(getattr(pkg, "summary", ""))}\n')
+            conf.write(f'arch=({quoted(pkg.arch)})\n')
+            if hasattr(pkg, 'homepage'):
+                conf.write(f'url={quoted(pkg.homepage)}\n')
+            if hasattr(pkg, 'license'):
+                conf.write(f'license=({quoted(pkg.license)})\n')
+            deps = str(getattr(pkg, 'deps', '') or '').replace(',', ' ').split()
+            conf.write('depends=(' + ' '.join(quoted(d) for d in deps) + ')\n')
+            conf.write('options=(!debug)\n')
+            conf.write('package() {\n    cp -a /app/install/. "$pkgdir"/\n}\n')
             conf.close()
 
 
@@ -229,7 +261,8 @@ class Packager:
     def run(args):
         result = subprocess.run(args, capture_output=True)
         if (result.returncode != 0):
-            logging.critical(result.stdout.decode('utf-8'))
+            logging.critical(result.stdout.decode('utf-8', 'replace'))
+            logging.critical(result.stderr.decode('utf-8', 'replace'))
             return False
         logging.debug(result.stdout.decode("utf-8"))
         return True
@@ -238,8 +271,11 @@ class Packager:
         # the compound package name is based on rpm full package name convention
         # <PKG_PACKAGE>-<PKG_VERSION>[-PKG_RELEASE].<PKG_ARCH>.<PKG_TYPE>
         # ex: rpn-2.4.2-0.x86_64.rpm
+        # pacman has its own: <PKG_PACKAGE>-<PKG_VERSION>-<PKG_RELEASE>-<PKG_ARCH>.pkg.tar.zst
         name = f'{manifest.pkg.package}-{manifest.pkg.version}'
-        if getattr(manifest.pkg, 'release') is not None:
+        if manifest.pkg.type == 'pacman':
+            return name + f'-{getattr(manifest.pkg, "release", 1)}-{manifest.pkg.arch}.pkg.tar.zst'
+        if getattr(manifest.pkg, 'release', None) is not None:
             name += f'-{manifest.pkg.release}'
         name += f'.{manifest.pkg.arch}.{manifest.pkg.type}'
         return name
@@ -257,7 +293,7 @@ class Packager:
 
     def make_docker_image(self, distro, version, image_tag):
         # docker image
-        dockerfile_path = os.path.dirname(__file__) + '/mdpack/distro/' + distro + '/docker'
+        dockerfile_path = MDPACK_DIR + '/distro/' + distro + '/docker'
 
         # TODO --network host to be removed if possible (security)
         return Packager.run(['docker', 'build', '--network', 'host', '--build-arg',
@@ -284,33 +320,39 @@ class Packager:
         env.append('#!/bin/bash\n')
         self.export_env(env, 'PKG_PACKAGE', manifest.pkg, 'package')
         self.export_env_list(env, 'APP_BUILD_CMAKE_OPTIONS', manifest.app.build, 'cmake_options')
+        self.export_env_list(env, 'APP_BUILD_CARGO_OPTIONS', manifest.app.build, 'cargo_options')
+        self.export_env_list(env, 'APP_BUILD_CARGO_BINS', manifest.app.build, 'cargo_bins')
+        self.export_env_list(env, 'APP_BUILD_FILES', manifest.app.build, 'files')
+        self.export_env(env, 'APP_BUILD_RUST_VERSION', manifest.app.build, 'rust_version')
         self.export_env_list(env, 'APP_BUILD_DEPS', manifest.app.build, 'deps')
+        if hasattr(manifest, 'test'):
+            self.export_env(env, 'TEST_COMMAND', manifest.test, 'command')
         env.append(f'export PKG_FILENAME={self.package_name(manifest)}\n')
         env.close()
 
     def make_user_deps_script(self, dest_dir, manifest, distro):
         if hasattr(manifest.app.build, 'deps'):
-            shutil.copy('mdpack/distro/' + distro + '/install_user_deps.sh',
+            shutil.copy(MDPACK_DIR + '/distro/' + distro + '/install_user_deps.sh',
                         dest_dir + '/install_user_deps.sh')
 
     def make_build_script(self, dest_dir, manifest):
-        src_path = 'mdpack/scripts/build/' + manifest.app.build.type + '.sh'
+        src_path = MDPACK_DIR + '/scripts/build/' + manifest.app.build.type + '.sh'
         if (os.path.exists(src_path)):
             shutil.copy(src_path, dest_dir + '/build.sh')
 
     def make_pkg_script(self, dest_dir, manifest):
-        src_path = 'mdpack/scripts/pkg/' + manifest.pkg.type + '.sh'
+        src_path = MDPACK_DIR + '/scripts/pkg/' + manifest.pkg.type + '.sh'
         if (os.path.exists(src_path)):
             PkgConfBuilder(manifest, dest_dir)
             shutil.copy(src_path, dest_dir + '/pkg.sh')
 
     def make_process_script(self, dest_dir, manifest, distro):
-        src_path = 'mdpack/distro/' + distro + '/whole_process.sh'
+        src_path = MDPACK_DIR + '/distro/' + distro + '/whole_process.sh'
         if (os.path.exists(src_path)):
             shutil.copy(src_path, dest_dir + '/whole_process.sh')
 
     def make_test_script(self, dest_dir, manifest, distro):
-        src_path = 'mdpack/scripts/test/' + distro + '.sh'
+        src_path = MDPACK_DIR + '/scripts/test/' + distro + '.sh'
         if (os.path.exists(src_path)):
             shutil.copy(src_path, dest_dir + '/test.sh')
 
@@ -330,10 +372,16 @@ class Packager:
                     logging.critical('app.source.tag or app.source.commit is required for git type')
                     return False
 
-                # check commit and tag match
+                # check commit and tag match (the commit of an annotated tag is its peeled ref)
                 if hasattr(manifest.app.source, 'tag') and hasattr(manifest.app.source, 'commit'):
-                    if not Packager.run(['git', 'ls-remote', '--tags', manifest.app.source.url, '|', 'grep',
-                                         f'refs/tags/{manifest.app.source.tag}' + '^{}']):
+                    tag = f'refs/tags/{manifest.app.source.tag}'
+                    result = subprocess.run(['git', 'ls-remote', manifest.app.source.url, tag, tag + '^{}'],
+                                            capture_output=True, text=True)
+                    refs = dict(reversed(line.split('\t')) for line in result.stdout.splitlines())
+                    found = refs.get(tag + '^{}', refs.get(tag))
+                    if found != str(manifest.app.source.commit):
+                        logging.critical(f'tag {manifest.app.source.tag} is {found}, '
+                                         f'not commit {manifest.app.source.commit}')
                         return False
 
                 if hasattr(manifest.app.source, 'tag'):
@@ -371,9 +419,11 @@ class Packager:
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         # TODO --net=host probably bad for security
+        cache_dir = LocalDirectory(os.path.join(CACHE_DIR, image_tag), clear_if_exist=False).path
         if not Packager.run(
-            ['docker', 'run', '-it', '--net=host', '--rm', '--name', self.container_name(image_tag, manifest),
-             '-v', dest_dir + ':/app', image_tag, '/bin/bash', '-x', '/app/whole_process.sh']):
+            ['docker', 'run', *Packager.interactive(), '--net=host', '--rm', '--name',
+             self.container_name(image_tag, manifest), '-v', dest_dir + ':/app:z', '-v', cache_dir + ':/cache:z',
+             image_tag, '/bin/bash', '-x', '/app/whole_process.sh']):
             return False
 
         # deliver the generated package near the current script
@@ -392,8 +442,13 @@ class Packager:
 
         # TODO --net=host probably bad for security
         return Packager.run(
-            ['docker', 'run', '-it', '--net=host', '--rm', '-v', dest_dir + ':/app', distro + ':' + version,
-             '/bin/bash', '-x', '/app/test.sh'])
+            ['docker', 'run', *Packager.interactive(), '--net=host', '--rm', '-v', dest_dir + ':/app:z',
+             distro + ':' + version, '/bin/bash', '-x', '/app/test.sh'])
+
+    @ staticmethod
+    def interactive():
+        "docker run options: a terminal only when there is one"
+        return ['-it'] if sys.stdin.isatty() else ['-i']
 
 
 class Options():
@@ -427,7 +482,7 @@ def main():
                 continue
 
             # complete manifest with distro fields then replace default entries by distro entries
-            distro_yaml = 'mdpack/distro/' + distro + '/' + distro + '.yaml'
+            distro_yaml = MDPACK_DIR + '/distro/' + distro + '/' + distro + '.yaml'
             distro_dict = (AddingYaml(path) + AddingYaml(distro_yaml)).dict
             Manifest.add_defaults(distro_dict, distro, version)
             Manifest.substitute_defaults(distro_dict, distro, version)

@@ -1,0 +1,4 @@
+# default fields for archlinux
+pkg:
+  type: pacman
+  arch: x86_64

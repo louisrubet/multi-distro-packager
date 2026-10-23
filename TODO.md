@@ -12,9 +12,10 @@
 - [ ] app build type = custom
 - [x] app build type cmake
 - [ ] app build type autotool
+- [x] app build type cargo
 - [ ] app build type python
 - [ ] distro `debian`
-- [ ] distro `archlinux`
+- [x] distro `archlinux` (pacman packages)
 - [ ] distro `centos`
 - [ ] checks most current errors (files exist, yaml required parameters, parameters types)
 - [ ] option --force to rebuild the image because changing the user deps in the yaml doesn't make docker rebuild the image

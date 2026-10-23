@@ -1,7 +1,5 @@
 # multi-distro-packager
 
-**This work is still in progress** but with a heavy commitment.
-
 ## Purpose
 
 Although [flatpak](https://flatpak.org/) and [snap](https://snapcraft.io/) are probably the future of linux packages, sometime you still have to deliver `deb` or `rpm` packages for some reason.
@@ -10,11 +8,11 @@ This project aims to develop a tool for generating such packages for several Lin
 
 This manifest allows you to configure:
 
-- the target Linux distros and their versions, among `ubuntu`, `fedora` ...
+- the target Linux distros and their versions, among `ubuntu`, `fedora`, `archlinux` ...
 - your project sources location as a `git` repo, an `archive`, or a local directory,
-- the generation process and tools for different languages, like `cmake` and `autotool` for now, and more later,
+- the generation process and tools for different languages, like `cmake` and `cargo` for now, and more later,
 - the dependencies packages needed by your project,
-- the packages meta-data, whether their format is `deb`, `rpm` or other.
+- the packages meta-data, whether their format is `deb`, `rpm`, `pacman` or other.
 
 Refer to the 'Manifest manual' paragraph below.
 
@@ -114,7 +112,8 @@ pkg:
 | key                     | priority                    | description                                                                                     |
 |-------------------------|-----------------------------|-------------------------------------------------------------------------------------------------|
 | distro                  | required                    | list of couples `distro:version` to deliver for.                                                |
-|                         |                             | distros can be `ubuntu`, `fedora`, `version` must match the docker repo version string.         |
+|                         |                             | distros can be `ubuntu`, `fedora`, `archlinux`; `version` must match the docker repo version    |
+|                         |                             | string (`latest` for `archlinux`).                                                              |
 | app                     | required                    |                                                                                                 |
 | app.source              | required                    | your app source description.                                                                    |
 | app.source.type         | required                    | source type among:                                                                              |
@@ -128,9 +127,14 @@ pkg:
 | app.build               | required                    | your app source and build description.                                                          |
 | app.build.type          | required                    | The build type among:                                                                           |
 |                         |                             | - `cmake`: the source is built with `cmake`                                                     |
+|                         |                             | - `cargo`: the source is built with `cargo` (Rust toolchain from rustup)                        |
 |                         |                             | - `autotool`: the source is built with `autotool`                           _to be implemented_ |
 |                         |                             | - `custom`: the user provides a bash script                                 _to be implemented_ |
 | app.build.cmake_options | optional (`cmake`)          | Options for `cmake`                                                                             |
+| app.build.cargo_options | optional (`cargo`)          | Options for `cargo build --release`, e.g. `[--locked]`                                          |
+| app.build.cargo_bins    | optional (`cargo`)          | Binaries installed in `/usr/bin` (default: the package name)                                    |
+| app.build.rust_version  | optional (`cargo`)          | Rust toolchain (default: `stable`)                                                              |
+| app.build.files         | optional (`cargo`)          | Other files to install, as `source:destination`, e.g. `LICENSE:/usr/share/licenses/x/LICENSE`  |
 | app.build.deps          | optional                    | Distro packages dependencies for building                                                       |
 | pkg **(1)**             | required                    | packages description                                                                            |
 | pkg.package             | required                    | package name                                                                                    |
@@ -144,7 +148,8 @@ pkg:
 | pkg.section             | optional                    | Category like `utils`, `net`, `mail`, etc.                                                      |
 | pkg.priority            | optional                    | Importance like `required`, `standard`, `optional`, `extra`, etc.                               |
 | pkg.homepage            | optional                    | Homepage URL                                                                                    |
-| pkg.depends             | optional                    | Comma-separated `package:version` list                                                          |
+| pkg.deps                | optional                    | Runtime dependencies, comma-separated                                                           |
+| test.command            | optional                    | Command run after installing the package in a clean container, e.g. `myapp --version`         |
 
 **(1)** The `pkg` fields match to the following package managers:
 
@@ -190,6 +195,13 @@ app:
 - `ubuntu_deps` will be applied to `ubuntu_20.04`
 - `fedora_deps` will be applied to `fedora:34` and `fedora:35`
 
+## Caches and SELinux
+
+- The Rust toolchain, the crates and the cargo build are kept between runs in
+  `~/.cache/mdpack/<image>` (`$XDG_CACHE_HOME/mdpack`), mounted as `/cache` in the containers.
+- The shared directories are mounted with `:z`, so that containers can use them on hosts where
+  docker runs with SELinux (Fedora).
+
 ## Performance
 
 Well, this is the bad part for now.
@@ -200,7 +212,7 @@ Although building the docker images is done only once,
   - a complete clone is done at every build (meaning at every distro),
   - the clone is not shallow,
 - `dir` source type: a complete source copy is made at every build (meaning at every distro),
-- all source types: all is built from scratch without cache
+- all source types: all is built from scratch without cache, except for the `cargo` build type (see [Caches and SELinux](#caches-and-selinux)),
 - 2 containers are run, 1 for building 1 for testing
 - the user build dependencies are installed once per container.
 
