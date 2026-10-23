@@ -1,0 +1,8 @@
+# work directories and packages made by mdpack.py
+mdp-*/
+*.deb
+*.rpm
+*.pkg.tar.zst
+# made by tests/tests.py
+test_manifest.yaml
+__pycache__/
